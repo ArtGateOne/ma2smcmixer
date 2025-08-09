@@ -1,0 +1,26 @@
+{
+  "name": "ma2smcmixer",
+  "version": "1.0.0",
+  "description": "none",
+  "main": "ma2smcmixer.js",
+  "scripts": {
+    "test": "none"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ArtGateOne/ma2smcmixer.git"
+  },
+  "keywords": [
+    "none"
+  ],
+  "author": "ArtGateOne",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ArtGateOne/ma2smcmixer/issues"
+  },
+  "homepage": "https://github.com/ArtGateOne/ma2smcmixer#readme",
+  "dependencies": {
+    "easymidi": "^3.1.0",
+    "websocket": "^1.0.34"
+  }
+}
