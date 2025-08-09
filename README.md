@@ -2,9 +2,15 @@
 control ma2 software via m-vave smc mixer midi controller
 
 
-BETA TEST 2
+BETA TEST
+
+
+
 nodejs v 14.17
+
 user smcmixer
+
 pass remote
+
 
 :)
