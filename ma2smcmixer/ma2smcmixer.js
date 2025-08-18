@@ -1,4 +1,4 @@
-//dot2SMC-Mixer v 0.98 by ArtGateOne
+//dot2SMC-Mixer v 1.0 by ArtGateOne
 
 var easymidi = require("easymidi");
 var W3CWebSocket = require("websocket").w3cwebsocket;
@@ -176,6 +176,25 @@ console.log(easymidi.getOutputs());
 console.log(" ");
 
 console.log("Connecting to " + midi_in);
+
+const availableInputs = easymidi.getInputs();
+const availableOutputs = easymidi.getOutputs();
+
+if (!availableInputs.includes(midi_in)) {
+  console.error(
+    `❌ MIDI IN "${midi_in}" nie znaleziony. Dostępne:`,
+    availableInputs
+  );
+  process.exit(1);
+}
+
+if (!availableOutputs.includes(midi_out)) {
+  console.error(
+    `❌ MIDI OUT "${midiName}" nie znaleziony. Dostępne:`,
+    availableInputs
+  );
+  process.exit(1);
+}
 
 //open midi device
 var input = new easymidi.Input(midi_in);
@@ -887,10 +906,7 @@ client.onclose = function () {
   console.log("Client Closed");
   setInterval(interval, 0);
 
-  for (i = 0; i <= 127; i++) {
-    output.send("noteon", { note: i, velocity: 0, channel: 0 });
-    sleep(10, function () {});
-  }
+  midiclear();
   /*
   for (i = 0; i <= 127; i++) {
     output.send("cc", { controller: i, value: 55, channel: 0 });
@@ -972,7 +988,7 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[0][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i, midiVal);
-          let isBlack = obj.itemGroups[0].items[0][i].i.c === "#000000";
+          let isBlack = obj.itemGroups[0].items[0][i].bdC === "#3D3D3D";               
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[0][i].isRun;
           sendNoteIfChanged(i, obj.itemGroups[0].items[0][i].isRun * 127);
           sendNoteIfChanged(i + 8, isBlack ? 0 : 127);
@@ -982,7 +998,7 @@ client.onmessage = function (e) {
         let v = obj.itemGroups[0].items[1][0].executorBlocks[0].fader.v;
         let midiVal = mapRange(v, 0, 1, 384, 15872);
         sendPitchIfChanged(5, midiVal);
-        let isBlack = obj.itemGroups[0].items[1][0].i.c === "#000000";
+        let isBlack = obj.itemGroups[0].items[1][0].bdC === "#3D3D3D";
         let shouldFlash = !isBlack && !obj.itemGroups[0].items[1][0].isRun;
         sendNoteIfChanged(5, obj.itemGroups[0].items[1][0].isRun * 127);
         sendNoteIfChanged(5 + 8, isBlack ? 0 : 127);
@@ -993,7 +1009,7 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[0][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i, midiVal);
-          let isBlack = obj.itemGroups[0].items[0][i].i.c === "#000000";
+          let isBlack = obj.itemGroups[0].items[0][i].bdC === "#3D3D3D";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[0][i].isRun;
           sendNoteIfChanged(i, obj.itemGroups[0].items[0][i].isRun * 127);
           sendNoteIfChanged(i + 8, isBlack ? 0 : 127);
@@ -1004,7 +1020,7 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[1][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i + 5, midiVal);
-          let isBlack = obj.itemGroups[0].items[1][i].i.c === "#000000";
+          let isBlack = obj.itemGroups[0].items[1][i].bdC === "#3D3D3D";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[1][i].isRun;
           sendNoteIfChanged(i + 5, obj.itemGroups[0].items[1][i].isRun * 127);
           sendNoteIfChanged(i + 5 + 8, isBlack ? 0 : 127);
@@ -1016,7 +1032,7 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[1][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i - 3, midiVal);
-          let isBlack = obj.itemGroups[0].items[1][i].i.c === "#000000";
+          let isBlack = obj.itemGroups[0].items[1][i].bdC === "#3D3D3D";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[1][i].isRun;
           sendNoteIfChanged(i - 3, obj.itemGroups[0].items[1][i].isRun * 127);
           sendNoteIfChanged(i - 3 + 8, isBlack ? 0 : 127);
@@ -1027,7 +1043,7 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[2][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i + 2, midiVal);
-          let isBlack = obj.itemGroups[0].items[2][i].i.c === "#000000";
+          let isBlack = obj.itemGroups[0].items[2][i].bdC === "#3D3D3D";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[2][i].isRun;
           sendNoteIfChanged(i + 2, obj.itemGroups[0].items[2][i].isRun * 127);
           sendNoteIfChanged(i + 2 + 8, isBlack ? 0 : 127);
@@ -1078,9 +1094,52 @@ function sendCommand(note, velocity) {
   }
 }
 
+function midiclear(){
+  for (i = 0; i <= 127; i++) {
+    output.send("noteon", { note: i, velocity: 0, channel: 0 });
+    sleep(10, function () {});
+  }
+}
+
 //sleep function
 function sleep(time, callback) {
   var stop = new Date().getTime();
   while (new Date().getTime() < stop + time) {}
   callback();
 }
+
+
+process.on("SIGINT", () => {
+  interval_on = 0;
+  console.log("CTRL+C -> awaryjne wyjście");
+  midiclear();
+  client.close();
+  input.close();
+  output.close();
+  process.exit(1); // kod błędu
+});
+
+process.on("SIGHUP", () => {
+  interval_on = 0;
+  console.log("CTRL+C -> awaryjne wyjście");
+  midiclear();
+  client.close();
+  input.close();
+  output.close();
+  process.exit(1); // kod błędu
+});
+
+process.on("SIGTERM", () => {
+  interval_on = 0;
+  console.log("CTRL+C -> awaryjne wyjście");
+  midiclear();
+  client.close();
+  input.close();
+  output.close();
+  process.exit(1); // kod błędu
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Nieobsłużony wyjątek:", err.message);
+  // Możesz tu np. spróbować ponownie połączyć z kontrolerem
+});
