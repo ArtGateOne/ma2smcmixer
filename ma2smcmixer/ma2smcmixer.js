@@ -1,4 +1,4 @@
-//dot2SMC-Mixer v 1.0 by ArtGateOne
+//dot2SMC-Mixer v 1.1 by ArtGateOne
 
 var easymidi = require("easymidi");
 var W3CWebSocket = require("websocket").w3cwebsocket;
@@ -7,11 +7,13 @@ var client = new W3CWebSocket("ws://localhost:80/"); //U can change localhost(12
 //config
 var midi_in = "SMC-Mixer"; //set correct midi in device name
 var midi_out = "SMC-Mixer"; //set correct midi out device name
+let start_page = 1; //start page
 var change_pages = 0; //Change pages 0 = OFF, 1 = ON midi, 2 = ON midi + onpc MA2
 var wing = 1; //Select wing mode: 0 = core (faders 1-6 + Master Sections), 1 = (faders 1 - 8), 2 = (faderes 9-15 + GM)
-var encoder_mode = 0; // 0 = MA encoders 1 2 3 4, 1 = Speed masters, 2 = custom fader, 3 = custom command , 4 = custom attribute <-------- only 0 ! beta ...work in progress
+var encoder_mode = 0; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command <---- not work (work in progress)....
 var fader8_GM = 0; //Fader 8 Grand Master: 0 = OFF, 1 = ON (only core)
-
+let encoderFader = 16; //Encoders as faders from nr (not feedback)
+let encoderFaderPage = 1; //Encoders Faders Page
 
 //custom commands for buttons 1-11
 var button_1_on = "";
@@ -37,39 +39,45 @@ var button_10_off = "";
 var button_11_on = "clear";
 var button_11_off = "";
 
-//----------------------------------------------------------------------------------------------------- beta work in progress
+//ENCODER CUSTOM COMMAND
+const encoder = [];
+const encoderVal = [];
+const validControllers = [16, 17, 18, 19, 20, 21, 22, 23];
+encoder[1] = "Fader, 1"; //work in progress
+encoder[2] = "Encoder, 1"; //work in progress
+encoder[3] = "Attribute, Dim"; //work in progress
+encoder[4] = ""; //work in progress
+encoder[5] = ""; //work in progress
+encoder[6] = ""; //work in progress
+encoder[7] = ""; //work in progress
+encoder[8] = ""; //work in progress
 
-//ENCODER FADER COMMAND
-var encoder_1 = "";
-var encoder_2 = "";
-var encoder_3 = "";
-var encoder_4 = "";
-var encoder_5 = "";
-var encoder_6 = "";
-var encoder_7 = "";
-var encoder_8 = "";
+//ENCODER CUSTOM ATTRIBUTE
+const attribute = [];
+attribute[1] = "Dim";
+attribute[2] = "Pan";
+attribute[3] = "Tilt";
+attribute[4] = "Focus";
+attribute[5] = "Zoom";
+attribute[6] = "ColorRGB1";
+attribute[7] = "ColorRGB2";
+attribute[8] = "ColorRGB3";
 
-
-//ENCODER ATTRIBUTE COMMAND
-var attribute_1 = "";
-var attribute_2 = "";
-var attribute_3 = "";
-var attribute_4 = "";
-var attribute_5 = "";
-var attribute_6 = "";
-var attribute_7 = "";
-var attribute_8 = "";
-
-
+//CUSTOM ATTRIBUTE ENCODER MODE 0 - ENCODERS 5-8
+if (encoder_mode == 0) {
+  attribute[5] = "Pan";
+  attribute[6] = "Tilt";
+  attribute[7] = "Focus";
+  attribute[8] = "Zoom";
+}
 
 //Master Section (core)
-var fader7 = "1.1"; //Core fader L SpecialMaster nr
-var fader8 = "1.2"; //Core fader R SpecialMaster nr
+let fader7 = "1.1"; //Core fader L SpecialMaster nr
+let fader8 = "1.2"; //Core fader R SpecialMaster nr
 
 //not change (fader 7 8 def feedback)
-var fader7_val = 15872; //default fader position for core L master fader
-var fader8_val = 128; //default fader position for core R master fader
-
+let fader7_val = 15872; //default fader position for core L master fader
+let fader8_val = 128; //default fader position for core R master fader
 
 //-------------------------------------------------------------------------------- END config
 
@@ -81,11 +89,21 @@ if (fader8_GM == 1 || wing == 2) {
   fader8_val = 15872;
 }
 
+if (encoder_mode == 1) {
+  for (let i = 1; i < 9; i++) {
+    encoderVal[i] = 60;
+  }
+} else if (encoder_mode == 2) {
+  for (let i = 1; i < 9; i++) {
+    encoderVal[i] = 0;
+  }
+}
+
 // Tablica wartości enkoderów (zakres 0–100)
 let encoderValues = Array(9).fill(0);
 
 // Zmienna globalna dla aktualnej wartości enkodera
-let encoder = 0;
+let act_encoder = 0;
 
 var speedmaster1 = 60;
 var speedmaster2 = 60;
@@ -95,8 +113,11 @@ var blackout = 0;
 var grandmaster = 100;
 var gmvalue = 43;
 var session = 0;
-var pageIndex = 0;
-const page = pageIndex + 1;
+if (start_page < 0) {
+  start_page = 0;
+}
+let pageIndex = start_page - 1;
+let page = start_page;
 
 var request = 0;
 var interval_on = 0;
@@ -250,197 +271,120 @@ input.on("cc", function (msg) {
           session +
           ',"requestType":"command","maxRequests":0}'
       );
+    } else if ([20, 21, 22, 23].includes(msg.controller)) {
+      if (validControllers.includes(msg.controller)) {
+        const encoderNr = msg.controller - 15;
+
+        const command = {
+          requestType: "encoder",
+          name: attribute[encoderNr],
+          value: encoder_step,
+          session: session,
+          maxRequests: 0,
+        };
+
+        client.send(JSON.stringify(command));
+      }
     }
   } else if (encoder_mode == 1) {
-    // MIXER Speed masters
+    // Encoder Speed masters
 
-    if (msg.controller == 16) {
-      //SpeedMaster 1
-      if (msg.value < 60) {
-        speedmaster1 = speedmaster1 + msg.value;
-      } else {
-        speedmaster1 = speedmaster1 + (msg.value - 128);
-      }
-      if (speedmaster1 < 0) {
-        speedmaster1 = 0;
+    if (validControllers.includes(msg.controller)) {
+      const encoderNr = msg.controller - 15;
+      encoderVal[encoderNr] = Math.max(0, encoderVal[encoderNr] + encoder_step);
+
+      const command = {
+        command: `SpecialMaster 3.${encoderNr} At ${encoderVal[encoderNr]}`,
+        session: session,
+        requestType: "command",
+        maxRequests: 0,
+      };
+
+      client.send(JSON.stringify(command));
+    }
+    /*if ([16, 17, 18, 19, 20, 21, 22, 23].includes(msg.controller)) {
+      let encoder_nr = msg.controller - 15;
+      encoder_val[encoder_nr] = encoder_val[encoder_nr] + encoder_step;
+      if (encoder_val[encoder_nr] < 0) {
+        encoder_val[encoder_nr] = 0;
       }
       client.send(
-        '{"command":"SpecialMaster 3.1 At ' +
-          speedmaster1 +
+        '{"command":"SpecialMaster 3.' +
+          encoder_nr +
+          " At " +
+          encoder_val[encoder_nr] +
           '","session":' +
           session +
           ',"requestType":"command","maxRequests":0}'
       );
-    }
-
-    if (msg.controller == 17) {
-      //SpeedMaster 2
-      if (msg.value < 60) {
-        speedmaster2 = speedmaster2 + msg.value;
-      } else {
-        speedmaster2 = speedmaster2 + (msg.value - 128);
-      }
-      if (speedmaster2 < 0) {
-        speedmaster2 = 0;
-      }
-      client.send(
-        '{"command":"SpecialMaster 3.2 At ' +
-          speedmaster2 +
-          '","session":' +
-          session +
-          ',"requestType":"command","maxRequests":0}'
-      );
-    }
-
-    if (msg.controller == 18) {
-      //SpeedMaster 3
-      if (msg.value < 60) {
-        speedmaster3 = speedmaster3 + msg.value;
-      } else {
-        speedmaster3 = speedmaster3 + (msg.value - 128);
-      }
-      if (speedmaster3 < 0) {
-        speedmaster3 = 0;
-      }
-      client.send(
-        '{"command":"SpecialMaster 3.3 At ' +
-          speedmaster3 +
-          '","session":' +
-          session +
-          ',"requestType":"command","maxRequests":0}'
-      );
-    }
-
-    if (msg.controller == 19) {
-      //SpeedMaster 4
-      if (msg.value < 60) {
-        speedmaster4 = speedmaster4 + msg.value;
-      } else {
-        speedmaster4 = speedmaster4 + (msg.value - 128);
-      }
-      if (speedmaster4 < 0) {
-        speedmaster4 = 0;
-      }
-      client.send(
-        '{"command":"SpecialMaster 3.4 At ' +
-          speedmaster4 +
-          '","session":' +
-          session +
-          ',"requestType":"command","maxRequests":0}'
-      );
-    }
+    }*/
   } else if (encoder_mode == 2) {
-    if (msg.controller == 16) {
-      //User1 Encoder 1
-      if (msg.value < 60) {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder1 +
-            ',"value":' +
-            msg.value +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      } else {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder1 +
-            ',"value":' +
-            (msg.value - 128) +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      }
-    } else if (msg.controller == 17) {
-      //User1 Encoder 2
-      if (msg.value < 60) {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder2 +
-            ',"value":' +
-            msg.value +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      } else {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder2 +
-            ',"value":' +
-            (msg.value - 128) +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      }
-    } else if (msg.controller == 18) {
-      //User1 Encoder 3
-      if (msg.value < 60) {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder3 +
-            ',"value":' +
-            msg.value +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      } else {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder3 +
-            ',"value":' +
-            (msg.value - 128) +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      }
-    } else if (msg.controller == 19) {
-      //User1 Encoder 4
-      if (msg.value < 60) {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder4 +
-            ',"value":' +
-            msg.value +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      } else {
-        client.send(
-          '{"requestType":"encoder","name":' +
-            user1_encoder4 +
-            ',"value":' +
-            (msg.value - 128) +
-            ',"session":' +
-            session +
-            '","maxRequests":0}'
-        );
-      }
+    //Encoder Faders
+    if (validControllers.includes(msg.controller)) {
+      const encoderNr = msg.controller - 15;
+      encoderVal[encoderNr] = Math.min(
+        100,
+        Math.max(0, encoderVal[encoderNr] + encoder_step)
+      );
+      const faderValue = mapRange(encoderVal[encoderNr], 0, 100, 0, 1);
+      const command = {
+        requestType: "playbacks_userInput",
+        execIndex: encoderFader + encoderNr - 2,
+        pageIndex: encoderFaderPage - 1,
+        faderValue: faderValue,
+        type: 1,
+        session: session,
+        maxRequests: 0,
+      };
+
+      client.send(JSON.stringify(command));
+
+      /*const command = {
+        command: `Fader ${encoderFaderPage}.${
+          encoderFader + encoderNr - 1
+        } At ${encoderVal[encoderNr]}`,
+        session: session,
+        requestType: "command",
+        maxRequests: 0,
+      };
+
+      client.send(JSON.stringify(command));*/
     }
   } else if (encoder_mode == 3) {
+    //Encoder Custom Attributes
+    if (validControllers.includes(msg.controller)) {
+      const encoderNr = msg.controller - 15;
+
+      const command = {
+        requestType: "encoder",
+        name: attribute[encoderNr],
+        value: encoder_step,
+        session: session,
+        maxRequests: 0,
+      };
+
+      client.send(JSON.stringify(command));
+    }
+  } else if (encoder_mode == 4) {
     const controllerIndex = msg.controller - 15;
 
-  if (controllerIndex > 0 && controllerIndex <= 8) {
-    const step = msg.value > 60 ? -1 : 1;
+    if (controllerIndex > 0 && controllerIndex <= 8) {
+      const step = msg.value > 60 ? -1 : 1;
 
-    // Aktualizacja wartości enkodera z ograniczeniem
-    encoderValues[controllerIndex] = Math.min(
-      100,
-      Math.max(0, encoderValues[controllerIndex] + step)
-    );
+      // Aktualizacja wartości enkodera z ograniczeniem
+      encoderValues[controllerIndex] = Math.min(
+        100,
+        Math.max(0, encoderValues[controllerIndex] + step)
+      );
 
-    // Ustawienie zmiennej encoder na aktualną wartość
-    encoder = encoderValues[controllerIndex];
+      // Ustawienie zmiennej encoder na aktualną wartość
+      act_encoder = encoderValues[controllerIndex];
 
-    // Wyświetlenie informacji
-    console.log(`Encoder ${controllerIndex}: ${encoder} step: ${step} ; Page ${page}`);
-  }
+      // Wyświetlenie informacji
+      console.log(
+        `Encoder ${controllerIndex}: ${act_encoder} step: ${step} ; Page ${page}`
+      );
+    }
   } else {
     if (msg.controller == 16) {
       //DIM
@@ -619,17 +563,17 @@ input.on("pitch", function (msg) {
     if (msg.channel < 6) {
       const clampedValue = Math.min(Math.max(msg.value, 756), 15872);
       const faderValue = mapRange(clampedValue, 756, 15872, 0, 1);
-      client.send(
-        '{"requestType":"playbacks_userInput","execIndex":' +
-          exec.index[wing][msg.channel] +
-          ',"pageIndex":' +
-          pageIndex +
-          ',"faderValue":' +
-          faderValue +
-          ',"type":1,"session":' +
-          session +
-          ',"maxRequests":0}'
-      );
+      const command = {
+        requestType: "playbacks_userInput",
+        execIndex: exec.index[wing][msg.channel],
+        pageIndex: pageIndex,
+        faderValue: faderValue,
+        type: 1,
+        session: session,
+        maxRequests: 0,
+      };
+
+      client.send(JSON.stringify(command));
     } else if (msg.channel == 6) {
       const clampedValue = Math.min(Math.max(msg.value, 756), 15872);
       let faderValue = mapRange(clampedValue, 756, 15872, 0, 100);
@@ -843,16 +787,18 @@ input.on("noteon", function (msg) {
 
         output.send("noteon", { note: msg.note, velocity: 127, channel: 0 });
         if (msg.note == 94) {
-          pageIndex = 0;
+          pageIndex = start_page - 1;
         } else if (msg.note == 93) {
-          pageIndex = 1;
+          pageIndex = start_page;
         } else if (msg.note == 95) {
-          pageIndex = 2;
+          pageIndex = start_page + 1;
         } else if (msg.note == 91) {
-          pageIndex = 3;
+          pageIndex = start_page + 2;
         } else if (msg.note == 92) {
-          pageIndex = 4;
+          pageIndex = start_page + 3;
         }
+
+        page = pageIndex + 1;
 
         if (change_pages > 1) {
           client.send(
@@ -988,7 +934,7 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[0][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i, midiVal);
-          let isBlack = obj.itemGroups[0].items[0][i].bdC === "#3D3D3D";               
+          let isBlack = obj.itemGroups[0].items[0][i].bdC === "#3D3D3D";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[0][i].isRun;
           sendNoteIfChanged(i, obj.itemGroups[0].items[0][i].isRun * 127);
           sendNoteIfChanged(i + 8, isBlack ? 0 : 127);
@@ -1094,7 +1040,7 @@ function sendCommand(note, velocity) {
   }
 }
 
-function midiclear(){
+function midiclear() {
   for (i = 0; i <= 127; i++) {
     output.send("noteon", { note: i, velocity: 0, channel: 0 });
     sleep(10, function () {});
