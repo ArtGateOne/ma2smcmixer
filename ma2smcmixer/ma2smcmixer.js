@@ -1,4 +1,4 @@
-//dot2SMC-Mixer v 1.2 by ArtGateOne
+//dot2SMC-Mixer v 1.3 by ArtGateOne
 
 var easymidi = require("easymidi");
 var W3CWebSocket = require("websocket").w3cwebsocket;
@@ -10,10 +10,10 @@ var midi_out = "SMC-Mixer"; //set correct midi out device name
 let start_page = 1; //start page
 var change_pages = 0; //Change pages 0 = OFF, 1 = ON midi, 2 = ON midi + onpc MA2
 var wing = 1; //Select wing mode: 0 = core (faders 1-6 + Master Sections), 1 = (faders 1 - 8), 2 = (faderes 9-15 + GM)
-var encoder_mode = 0; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command <---- 4 not work (work in progress)....
+var encoder_mode = 1; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command
 var fader8_GM = 0; //Fader 8 Grand Master: 0 = OFF, 1 = ON (only core)
 let encoderFader = 16; //Encoders as faders from nr (not feedback)
-let encoderFaderPage = 1; //Encoders Faders Page
+let encoderPage = 1; //Encoders Page for Encoder Faders and Custom command
 
 //custom commands for buttons 1-11
 var button_1_on = "";
@@ -59,12 +59,15 @@ if (encoder_mode == 0) {
 }
 
 //ENCODER CUSTOM COMMAND
-const encoderVal = [];
-const validControllers = [16, 17, 18, 19, 20, 21, 22, 23];
-const encoder = [//work in progress
-  { type: "Fader", value: 1 },//work in progress
-  { type: "Encoder", value: 1 },//work in progress
-  { type: "Attribute", value: "Dim" },//work in progress
+const encoder = [
+  { type: "Fader", value: 1 },
+  { type: "Encoder", value: 1 },
+  { type: "Attribute", value: "DIM" },
+  { type: "SpeedMaster", value: 1 },
+  { type: "GrandMaster", value: 100 },
+  { type: "Empty", value: 0 },
+  { type: "Empty", value: 0 },
+  { type: "Empty", value: 0 },
 ];
 
 //Master Section (core)
@@ -79,6 +82,8 @@ let fader8_val = 128; //default fader position for core R master fader
 
 const debug = true;
 
+const encoderVal = [];
+const validControllers = [16, 17, 18, 19, 20, 21, 22, 23];
 const prevFaderValues = new Array(8).fill(null);
 const prevNoteStates = {};
 
@@ -94,6 +99,17 @@ if (encoder_mode == 1) {
 } else if (encoder_mode == 2) {
   for (let i = 1; i < 9; i++) {
     encoderVal[i] = 0;
+  }
+} else if (encoder_mode === 4) {
+  for (let i = 0; i < encoder.length; i++) {
+    const item = encoder[i];
+    if (item.type === "Fader") {
+      encoderVal[i] = 0;
+    } else if (item.type === "SpeedMaster") {
+      encoderVal[i] = 60;
+    } else if (item.type === "GrandMaster") {
+      encoderVal[i] = item.value;
+    }
   }
 }
 
@@ -328,7 +344,7 @@ input.on("cc", function (msg) {
       const command = {
         requestType: "playbacks_userInput",
         execIndex: encoderFader + encoderNr - 2,
-        pageIndex: encoderFaderPage - 1,
+        pageIndex: encoderPage - 1,
         faderValue: faderValue,
         type: 1,
         session: session,
@@ -338,7 +354,7 @@ input.on("cc", function (msg) {
       client.send(JSON.stringify(command));
 
       /*const command = {
-        command: `Fader ${encoderFaderPage}.${
+        command: `Fader ${encoderPage}.${
           encoderFader + encoderNr - 1
         } At ${encoderVal[encoderNr]}`,
         session: session,
@@ -365,34 +381,99 @@ input.on("cc", function (msg) {
     }
   } else if (encoder_mode == 4) {
     const controllerIndex = msg.controller - 16;
+    const currentEncoder = encoder[controllerIndex];
 
     if (controllerIndex >= 0 && controllerIndex < 8) {
       const step = msg.value > 60 ? -1 : 1;
 
       // Aktualizacja wartości enkodera z ograniczeniem
-      encoderValues[controllerIndex] = Math.min(
-        100,
-        Math.max(0, encoderValues[controllerIndex] + step)
-      );
+      if (encoder[controllerIndex].type === "SpeedMaster") {
+        // Brak ograniczenia górnej granicy
+        encoderVal[controllerIndex] = Math.max(
+          0,
+          encoderVal[controllerIndex] + step
+        );
+      } else {
+        // Standardowe ograniczenie 0–100
+        encoderVal[controllerIndex] = Math.min(
+          100,
+          Math.max(0, encoderVal[controllerIndex] + step)
+        );
+      }
 
       // Ustawienie zmiennej encoder na aktualną wartość
-      act_encoder = encoderValues[controllerIndex];
+      act_encoder = encoderVal[controllerIndex];
+      if (currentEncoder.type == "GrandMaster") {
+        client.send(
+          '{"command":"SpecialMaster 2.1 At ' +
+            act_encoder +
+            '","session":' +
+            session +
+            ',"requestType":"command","maxRequests":0}'
+        );
+      } else if (currentEncoder.type == "SpeedMaster") {
+        client.send(
+          '{"command":"SpecialMaster 3.' +
+            currentEncoder.value +
+            " At " +
+            act_encoder +
+            '","session":' +
+            session +
+            ',"requestType":"command","maxRequests":0}'
+        );
+      } else if (currentEncoder.type == "Encoder") {
+        client.send(
+          '{"command":LUA "gma.canbus.encoder(' +
+            (currentEncoder.value - 1) +
+            "," +
+            step +
+            ',nil)","session":' +
+            session +
+            ',"requestType":"command","maxRequests":0}'
+        );
+      } else if (currentEncoder.type == "Fader") {
+        const faderValue = mapRange(act_encoder, 0, 100, 0, 1);
+        const command = {
+          requestType: "playbacks_userInput",
+          execIndex: currentEncoder.value - 1,
+          pageIndex: encoderPage - 1,
+          faderValue: faderValue,
+          type: 1,
+          session: session,
+          maxRequests: 0,
+        };
+
+        client.send(JSON.stringify(command));
+      } else if (currentEncoder.type == "Attribute") {
+        client.send(
+          '{"command":"Attribute ' +
+            currentEncoder.value +
+            " At + " +
+            step +
+            '","session":' +
+            session +
+            ',"requestType":"command","maxRequests":0}'
+        );
+      }
 
       // Wyświetlenie informacji
       if (debug) {
-  const currentEncoder = encoder[controllerIndex];
-
-  if (currentEncoder) {
-    console.log(
-      `Encoder ${controllerIndex + 1}: ${act_encoder}, step: ${step}, Page: ${page}, Encoder Type: ${currentEncoder.type}, ${currentEncoder.value}`
-    );
-  } else {
-    console.log(
-      `Encoder ${controllerIndex + 1}: ${act_encoder}, step: ${step}. Page: ${page}`
-    );
-  }
-}
-
+        if (currentEncoder) {
+          console.log(
+            `Encoder ${
+              controllerIndex + 1
+            }: ${act_encoder}, step: ${step}, Page: ${page}, Encoder Type: ${
+              currentEncoder.type
+            }, ${currentEncoder.value}`
+          );
+        } else {
+          console.log(
+            `Encoder ${
+              controllerIndex + 1
+            }: ${act_encoder}, step: ${step}. Page: ${page}`
+          );
+        }
+      }
     }
   } else {
     if (msg.controller == 16) {
