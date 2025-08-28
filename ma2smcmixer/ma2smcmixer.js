@@ -10,7 +10,7 @@ var midi_out = "SMC-Mixer"; //set correct midi out device name
 let start_page = 1; //start page
 var change_pages = 0; //Change pages 0 = OFF, 1 = ON midi, 2 = ON midi + onpc MA2
 var wing = 1; //Select wing mode: 0 = core (faders 1-6 + Master Sections), 1 = (faders 1 - 8), 2 = (faderes 9-15 + GM)
-var encoder_mode = 1; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command
+var encoder_mode = 0; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command
 var fader8_GM = 0; //Fader 8 Grand Master: 0 = OFF, 1 = ON (only core)
 let encoderFader = 16; //Encoders as faders from nr (not feedback)
 let encoderPage = 1; //Encoders Page for Encoder Faders and Custom command
