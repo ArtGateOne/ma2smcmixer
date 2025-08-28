@@ -1,4 +1,4 @@
-//dot2SMC-Mixer v 1.1 by ArtGateOne
+//dot2SMC-Mixer v 1.2 by ArtGateOne
 
 var easymidi = require("easymidi");
 var W3CWebSocket = require("websocket").w3cwebsocket;
@@ -10,7 +10,7 @@ var midi_out = "SMC-Mixer"; //set correct midi out device name
 let start_page = 1; //start page
 var change_pages = 0; //Change pages 0 = OFF, 1 = ON midi, 2 = ON midi + onpc MA2
 var wing = 1; //Select wing mode: 0 = core (faders 1-6 + Master Sections), 1 = (faders 1 - 8), 2 = (faderes 9-15 + GM)
-var encoder_mode = 0; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command <---- not work (work in progress)....
+var encoder_mode = 0; // 0 = MA encoders + Custom attributes, 1 = Speed masters, 2 = Faders, 3 = Custom attributes , 4 = Custom command <---- 4 not work (work in progress)....
 var fader8_GM = 0; //Fader 8 Grand Master: 0 = OFF, 1 = ON (only core)
 let encoderFader = 16; //Encoders as faders from nr (not feedback)
 let encoderFaderPage = 1; //Encoders Faders Page
@@ -39,19 +39,6 @@ var button_10_off = "";
 var button_11_on = "clear";
 var button_11_off = "";
 
-//ENCODER CUSTOM COMMAND
-const encoder = [];
-const encoderVal = [];
-const validControllers = [16, 17, 18, 19, 20, 21, 22, 23];
-encoder[1] = "Fader, 1"; //work in progress
-encoder[2] = "Encoder, 1"; //work in progress
-encoder[3] = "Attribute, Dim"; //work in progress
-encoder[4] = ""; //work in progress
-encoder[5] = ""; //work in progress
-encoder[6] = ""; //work in progress
-encoder[7] = ""; //work in progress
-encoder[8] = ""; //work in progress
-
 //ENCODER CUSTOM ATTRIBUTE
 const attribute = [];
 attribute[1] = "Dim";
@@ -71,6 +58,15 @@ if (encoder_mode == 0) {
   attribute[8] = "Zoom";
 }
 
+//ENCODER CUSTOM COMMAND
+const encoderVal = [];
+const validControllers = [16, 17, 18, 19, 20, 21, 22, 23];
+const encoder = [//work in progress
+  { type: "Fader", value: 1 },//work in progress
+  { type: "Encoder", value: 1 },//work in progress
+  { type: "Attribute", value: "Dim" },//work in progress
+];
+
 //Master Section (core)
 let fader7 = "1.1"; //Core fader L SpecialMaster nr
 let fader8 = "1.2"; //Core fader R SpecialMaster nr
@@ -80,6 +76,8 @@ let fader7_val = 15872; //default fader position for core L master fader
 let fader8_val = 128; //default fader position for core R master fader
 
 //-------------------------------------------------------------------------------- END config
+
+const debug = true;
 
 const prevFaderValues = new Array(8).fill(null);
 const prevNoteStates = {};
@@ -366,9 +364,9 @@ input.on("cc", function (msg) {
       client.send(JSON.stringify(command));
     }
   } else if (encoder_mode == 4) {
-    const controllerIndex = msg.controller - 15;
+    const controllerIndex = msg.controller - 16;
 
-    if (controllerIndex > 0 && controllerIndex <= 8) {
+    if (controllerIndex >= 0 && controllerIndex < 8) {
       const step = msg.value > 60 ? -1 : 1;
 
       // Aktualizacja wartości enkodera z ograniczeniem
@@ -381,9 +379,20 @@ input.on("cc", function (msg) {
       act_encoder = encoderValues[controllerIndex];
 
       // Wyświetlenie informacji
-      console.log(
-        `Encoder ${controllerIndex}: ${act_encoder} step: ${step} ; Page ${page}`
-      );
+      if (debug) {
+  const currentEncoder = encoder[controllerIndex];
+
+  if (currentEncoder) {
+    console.log(
+      `Encoder ${controllerIndex + 1}: ${act_encoder}, step: ${step}, Page: ${page}, Encoder Type: ${currentEncoder.type}, ${currentEncoder.value}`
+    );
+  } else {
+    console.log(
+      `Encoder ${controllerIndex + 1}: ${act_encoder}, step: ${step}. Page: ${page}`
+    );
+  }
+}
+
     }
   } else {
     if (msg.controller == 16) {
@@ -885,10 +894,6 @@ client.onmessage = function (e) {
   }
 
   if (typeof e.data === "string") {
-    //console.log("Received: '" + e.data + "'");
-    //console.log("-----------------");
-    //console.log(e.data);
-
     obj = JSON.parse(e.data);
 
     if (obj.status == "server ready") {
@@ -910,7 +915,7 @@ client.onmessage = function (e) {
     if (obj.responseType == "login" && obj.result === true) {
       if (interval_on == 0) {
         interval_on = 1;
-        setInterval(interval, 100); //80
+        setInterval(interval, 80); //80
       }
       console.log("...LOGGED");
       console.log("SESSION " + session);
@@ -934,7 +939,9 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[0][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i, midiVal);
-          let isBlack = obj.itemGroups[0].items[0][i].bdC === "#3D3D3D";
+          let isBlack =
+            obj.itemGroups[0].items[0][i].bdC === "#3D3D3D" ||
+            obj.itemGroups[0].items[0][i].bdC === "#404040";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[0][i].isRun;
           sendNoteIfChanged(i, obj.itemGroups[0].items[0][i].isRun * 127);
           sendNoteIfChanged(i + 8, isBlack ? 0 : 127);
@@ -944,7 +951,9 @@ client.onmessage = function (e) {
         let v = obj.itemGroups[0].items[1][0].executorBlocks[0].fader.v;
         let midiVal = mapRange(v, 0, 1, 384, 15872);
         sendPitchIfChanged(5, midiVal);
-        let isBlack = obj.itemGroups[0].items[1][0].bdC === "#3D3D3D";
+        let isBlack =
+          obj.itemGroups[0].items[1][0].bdC === "#3D3D3D" ||
+          obj.itemGroups[0].items[1][0].bdC === "#404040";
         let shouldFlash = !isBlack && !obj.itemGroups[0].items[1][0].isRun;
         sendNoteIfChanged(5, obj.itemGroups[0].items[1][0].isRun * 127);
         sendNoteIfChanged(5 + 8, isBlack ? 0 : 127);
@@ -955,7 +964,9 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[0][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i, midiVal);
-          let isBlack = obj.itemGroups[0].items[0][i].bdC === "#3D3D3D";
+          let isBlack =
+            obj.itemGroups[0].items[0][i].bdC === "#3D3D3D" ||
+            obj.itemGroups[0].items[0][i].bdC === "#404040";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[0][i].isRun;
           sendNoteIfChanged(i, obj.itemGroups[0].items[0][i].isRun * 127);
           sendNoteIfChanged(i + 8, isBlack ? 0 : 127);
@@ -966,7 +977,9 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[1][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i + 5, midiVal);
-          let isBlack = obj.itemGroups[0].items[1][i].bdC === "#3D3D3D";
+          let isBlack =
+            obj.itemGroups[0].items[1][i].bdC === "#3D3D3D" ||
+            obj.itemGroups[0].items[1][i].bdC === "#404040";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[1][i].isRun;
           sendNoteIfChanged(i + 5, obj.itemGroups[0].items[1][i].isRun * 127);
           sendNoteIfChanged(i + 5 + 8, isBlack ? 0 : 127);
@@ -978,7 +991,9 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[1][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i - 3, midiVal);
-          let isBlack = obj.itemGroups[0].items[1][i].bdC === "#3D3D3D";
+          let isBlack =
+            obj.itemGroups[0].items[1][i].bdC === "#3D3D3D" ||
+            obj.itemGroups[0].items[1][i].bdC === "#404040";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[1][i].isRun;
           sendNoteIfChanged(i - 3, obj.itemGroups[0].items[1][i].isRun * 127);
           sendNoteIfChanged(i - 3 + 8, isBlack ? 0 : 127);
@@ -989,7 +1004,9 @@ client.onmessage = function (e) {
           let v = obj.itemGroups[0].items[2][i].executorBlocks[0].fader.v;
           let midiVal = mapRange(v, 0, 1, 384, 15872);
           sendPitchIfChanged(i + 2, midiVal);
-          let isBlack = obj.itemGroups[0].items[2][i].bdC === "#3D3D3D";
+          let isBlack =
+            obj.itemGroups[0].items[2][i].bdC === "#3D3D3D" ||
+            obj.itemGroups[0].items[2][i].bdC === "#404040";
           let shouldFlash = !isBlack && !obj.itemGroups[0].items[2][i].isRun;
           sendNoteIfChanged(i + 2, obj.itemGroups[0].items[2][i].isRun * 127);
           sendNoteIfChanged(i + 2 + 8, isBlack ? 0 : 127);
@@ -1053,7 +1070,6 @@ function sleep(time, callback) {
   while (new Date().getTime() < stop + time) {}
   callback();
 }
-
 
 process.on("SIGINT", () => {
   interval_on = 0;
